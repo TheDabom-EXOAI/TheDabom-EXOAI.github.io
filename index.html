@@ -434,9 +434,9 @@ const getRandomImage = () => {
             <div className="input-output-wrapper">
                 <div className="input-section">
                     <div className="collapsible-section">
-                        <h3 onClick={() => setShowCMAs(!showCMAs)}> 
-                            CMAs {showCMAs ? '▼' : '▶'}
-                        </h3>
+<h3 onClick={() => setShowCMAs(!showCMAs)}> 
+    Critical Material Attributes (CMAs) {showCMAs ? '▼' : '▶'}
+</h3>
                         {showCMAs && (
                             <div>
                                 {lipids.map((lipid, index) => (
@@ -469,9 +469,9 @@ const getRandomImage = () => {
                         )}
                     </div>
                     <div className="collapsible-section">
-                        <h3 onClick={() => setShowCPPs(!showCPPs)}>
-                            CPPs {showCPPs ? '▼' : '▶'}
-                        </h3>
+<h3 onClick={() => setShowCPPs(!showCPPs)}>
+    Critical Process Parameters (CPPs) {showCPPs ? '▼' : '▶'}
+</h3>
                         {showCPPs && (
                             <div>
                                 <div className="input-group">
@@ -497,7 +497,7 @@ const getRandomImage = () => {
                     </div>
                 </div>
                 <div className="output-section">
-                    <h3>CQAs</h3>
+<h3>Critical Quality Attributes (CQAs)</h3>
                     <p>Particle Size: <span className="output-value">{outputs.particleSize}</span></p>
                     <p>Zeta Potential: <span className="output-value">{outputs.zetaPotential}</span></p>
                     <p>PDI: <span className="output-value">{outputs.pdi}</span></p>
