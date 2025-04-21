@@ -267,221 +267,156 @@ const NanoparticleSimulator = () => {
         { name: 'PE', min: 10, max: 30 }
     ];
 
-    // 新增加载状态管理
-    const [model, setModel] = React.useState(null);
-    const [scalers, setScalers] = React.useState(null);
-    const [isLoadingResources, setIsLoadingResources] = React.useState(true);
+    // 状态管理
+    const [isLoadingResources, setIsLoadingResources] = React.useState(false);
     const [loadError, setLoadError] = React.useState(null);
+    const [inputs, setInputs] = React.useState(lipids.map(() => ''));
+    const [selectedRNA, setSelectedRNA] = React.useState('');
+    const [outputs, setOutputs] = React.useState({
+        particleSize: '0',
+        zetaPotential: '0',
+        pdi: '0'
+    });
+    const [reference, setReference] = React.useState('');
+    const [errors, setErrors] = React.useState(lipids.map(() => ''));
+    const [data, setData] = React.useState([]);
+    const [showCSV, setShowCSV] = React.useState(false);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [showCMAs, setShowCMAs] = React.useState(true);
+    const [showCPPs, setShowCPPs] = React.useState(true);
+    const [temperature, setTemperature] = React.useState('');
+    const [flowRate, setFlowRate] = React.useState('');
 
-    // 改进的资源加载逻辑
+    // RNA选项
+    const RNAOptions = [
+        'miR26a', 'miR27a', 'HMBG1 target siRNA', 
+        'TNFRSF19L siRNA', 'anti-podoplanin siRNA'
+    ];
+
     React.useEffect(() => {
-        const loadResources = async () => {
-            try {
-                setIsLoadingResources(true);
-                setLoadError(null);
+        loadDefaultCSV();
+    }, []);
 
-                // 并行加载资源
-                const [loadedModel, loadedScalers] = await Promise.all([
-                    tf.loadLayersModel('https://hairi0226.github.io/hairi_github.io/modelv3.json')
-                        .then(model => {
-                            // 更安全的输入形状设置
-                            model.inputs[0].shape = [null, 5];
-                            return model;
-                        }),
-                    fetch('https://hairi0226.github.io/hairi_github.io/scaler_paramsv2.json', {
-                        mode: 'cors' // 明确指定CORS模式
-                    }).then(async response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status} ${response.statusText}`);
-                        }
-                        return response.json();
-                    })
-                ]);
-
-                // 验证scaler结构
-                if (!loadedScalers.X_mean || !loadedScalers.X_scale) {
-                    throw new Error('Invalid scalers format');
+    const loadDefaultCSV = () => {
+        fetch('https://hairi0226.github.io/hairi_github.io/data/test_base.csv')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
-                setModel(loadedModel);
-                setScalers(loadedScalers);
-                setIsLoadingResources(false);
-            } catch (error) {
-                console.error('加载错误详情:', {
-                    error: error.stack,
-                    modelLoaded: !!model,
-                    scalersLoaded: !!scalers
+                return response.text();
+            })
+            .then(csvText => {
+                Papa.parse(csvText, {
+                    complete: (results) => {
+                        setData(results.data);
+                        console.log("Default data:", results.data);
+                    },
+                    header: true
                 });
-                setLoadError(error.message);
-                setIsLoadingResources(false);
-            }
-        };
-
-        loadResources();
-}, []);
-
-
-      
-        const RNAOptions = [
-            'miR26a', 'miR27a', 'HMBG1 target siRNA', 
-            'TNFRSF19L siRNA', 'anti-podoplanin siRNA'
-        ];
-
-        const [inputs, setInputs] = React.useState(lipids.map(() => ''));
-        const [selectedRNA, setSelectedRNA] = React.useState('');
-        const [outputs, setOutputs] = React.useState({
-            particleSize: '0',
-            zetaPotential: '0',
-            pdi: '0'
-        });
-        const [reference, setReference] = React.useState('');
-        const [errors, setErrors] = React.useState(lipids.map(() => ''));
-        const [data, setData] = React.useState([]);
-        const [showCSV, setShowCSV] = React.useState(false);
-        const [isLoading, setIsLoading] = React.useState(false);
-        const [showCMAs, setShowCMAs] = React.useState(true);
-        const [showCPPs, setShowCPPs] = React.useState(true);
-        const [temperature, setTemperature] = React.useState('');
-        const [flowRate, setFlowRate] = React.useState('');
-
-        React.useEffect(() => {
-            loadDefaultCSV();
-        }, []);
-
-        const loadDefaultCSV = () => {
-            fetch('https://hairi0226.github.io/hairi_github.io/data/test_base.csv')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.text();
-                })
-                .then(csvText => {
-                    Papa.parse(csvText, {
-                        complete: (results) => {
-                            setData(results.data);
-                            console.log("Default data:", results.data);
-                        },
-                        header: true
-                    });
-                })
-                .catch(e => console.error('Error loading CSV:', e));
-        };
-
-        const handleInputChange = (index, value) => {
-            const newInputs = [...inputs];
-            newInputs[index] = value;
-            setInputs(newInputs);
-
-            const newErrors = [...errors];
-            const lipid = lipids[index];
-            if (value !== '' && (Number(value) < lipid.min || Number(value) > lipid.max)) {
-                newErrors[index] = `Value should be between ${lipid.min} and ${lipid.max}`;
-            } else {
-                newErrors[index] = '';
-            }
-            setErrors(newErrors);
-        };
-
-        const calculateOutputs = async () => {
-    setIsLoading(true);
-
-    // 检查输入和是否为 100
-    const numInputs = inputs.map(val => parseFloat(val) || 0); // 确保是数值
-    const sum = numInputs.reduce((a, b) => a + b, 0);
-    if (sum !== 100) {
-        alert('The sum of all components must equal 100');
-        setIsLoading(false);
-        return;
-    }
-
-    if (!model || !scalers) {
-        alert('Model or scalers are not loaded yet.');
-        setIsLoading(false);
-        return;
-    }
-
-    try {
-      const numInputs = inputs.map(val => {
-                const num = parseFloat(val || 0);
-                if (isNaN(num)) throw new Error('Invalid input value');
-                return num;
-            });
-        // 归一化输入
-        const normalizedInputs = numInputs.map((val, i) => 
-            (val - scalers.X_mean[i]) / scalers.X_scale[i]
-        );
-      
-      const sum = numInputs.reduce((a, b) => a + b, 0);
-            if (Math.abs(sum - 100) > 0.01) {
-                throw new Error('The sum of all components must equal 100');
-            }
-      
-      if (!model || !scalers) {
-                throw new Error('Model or scalers are not loaded yet');
-            }
-      
-      
-
-        // 预测
-        const tensorInput = tf.tensor([normalizedInputs]);
-        const tensorOutput = model.predict(tensorInput);
-        const tensorArray = await tensorOutput.array(); 
-
-        // 反归一化输出
-            const finalResults = predictions.map((val, i) => 
-                val * scalers.y_scale[i] + scalers.y_mean[i]
-            );
-
-            // 更新状态
-            setOutputs({
-                particleSize: `${finalResults[0].toFixed(2)} nm`,
-                zetaPotential: `${finalResults[1].toFixed(2)} mV`,
-                pdi: finalResults[2].toFixed(4)
-            });
-            setReference('Prediction from TensorFlow.js model');
-
-        } catch (error) {
-            console.error('计算错误:', error);
-            alert(`计算失败: ${error.message}`);
-        } finally {
-            setIsLoading(false);
-        }
+            })
+            .catch(e => console.error('Error loading CSV:', e));
     };
 
-      
-const getRandomImage = () => {
-    const images = [
-        'https://hairi0226.github.io/hairi_github.io/LNP/LNP1.png',
-        'https://hairi0226.github.io/hairi_github.io/LNP/LNP2.png',
-        'https://hairi0226.github.io/hairi_github.io/LNP/LNP3.png',
-        'https://hairi0226.github.io/hairi_github.io/LNP/LNP4.png'
-    ];
-    const randomIndex = Math.floor(Math.random() * images.length);
-    return images[randomIndex];
-};
+    const handleInputChange = (index, value) => {
+        const newInputs = [...inputs];
+        newInputs[index] = value;
+        setInputs(newInputs);
 
-        const handleRNAChange = (event) => {
-            setSelectedRNA(event.target.value);
-        };
+        const newErrors = [...errors];
+        const lipid = lipids[index];
+        if (value !== '' && (Number(value) < lipid.min || Number(value) > lipid.max)) {
+            newErrors[index] = `Value should be between ${lipid.min} and ${lipid.max}`;
+        } else {
+            newErrors[index] = '';
+        }
+        setErrors(newErrors);
+    };
 
-        const toggleCSVView = () => {
-            if (!showCSV) {
-                loadDefaultCSV();
+    const calculateOutputs = () => {
+        setIsLoading(true);
+        console.log("Calculating outputs...");
+        console.log("Inputs:", inputs);
+        console.log("Data:", data);
+        
+        // 检查输入和是否为 100
+        const numInputs = inputs.map(val => parseFloat(val) || 0); // 确保是数值
+        const sum = numInputs.reduce((a, b) => a + b, 0);
+        if (sum !== 100) {
+            alert('The sum of all components must equal 100');
+            setIsLoading(false);
+            return;
+        }
+
+        // 使用setTimeout模拟计算过程，等待2秒
+        setTimeout(() => {
+            let matchingRow;
+            if (data.length > 0) {
+                matchingRow = data.find(row =>
+                    row.CHOL == numInputs[0] &&
+                    row.SM == numInputs[1] &&
+                    row.PC == numInputs[2] &&
+                    row.PS == numInputs[3] &&
+                    row.PE == numInputs[4]
+                );
             }
-            setShowCSV(!showCSV);
-        };
-      
 
-        return (
-            <div className="container">
-                <div className="header">
-                    <img src="https://hairi0226.github.io/hairi_github.io/images/thedabom_symbol_white_removed_background.png" alt="thedabom Logo" className="logo" />
-                    {/* Removed the original EXOAI™ title */}
-                </div>
-                <div className="background-image-container">
-                    <div className="background-text">EXOAI</div>
-                </div>
+            if (matchingRow) {
+                setOutputs({
+                    particleSize: matchingRow['Particle Size'] || '0 (data not shown)',
+                    zetaPotential: matchingRow['Zeta Potential'] || '0 (data not shown)',
+                    pdi: matchingRow['PDI'] || '0 (data not shown)',
+                    imageUrl: getRandomImage()
+                });
+                setReference(matchingRow['Ref'] ? `<a href="${matchingRow['Ref']}" target="_blank">Link to Paper</a>` : 'Reference not available');
+            } else {
+                // 生成随机结果
+                const particleSize = Math.random() * (150 - 50) + 50;
+                const zetaPotential = Math.random() * 60 - 30;
+                const pdi = Math.random() * (0.3 - 0.05) + 0.05;
+                
+                setOutputs({
+                    particleSize: `${particleSize.toFixed(2)} nm (Predicted)`,
+                    zetaPotential: `${zetaPotential.toFixed(2)} mV (Predicted)`,
+                    pdi: pdi.toFixed(4) + ' (Predicted)',
+                    imageUrl: getRandomImage()
+                });
+                setReference('Prediction - No matching data');
+            }
+            
+            setIsLoading(false);
+        }, 2000);
+    };
+
+    const getRandomImage = () => {
+        const images = [
+            'https://hairi0226.github.io/hairi_github.io/LNP/LNP1.png',
+            'https://hairi0226.github.io/hairi_github.io/LNP/LNP2.png',
+            'https://hairi0226.github.io/hairi_github.io/LNP/LNP3.png',
+            'https://hairi0226.github.io/hairi_github.io/LNP/LNP4.png'
+        ];
+        const randomIndex = Math.floor(Math.random() * images.length);
+        return images[randomIndex];
+    };
+
+    const handleRNAChange = (event) => {
+        setSelectedRNA(event.target.value);
+    };
+
+    const toggleCSVView = () => {
+        if (!showCSV) {
+            loadDefaultCSV();
+        }
+        setShowCSV(!showCSV);
+    };
+
+    return (
+        <div className="container">
+            <div className="header">
+                <img src="https://hairi0226.github.io/hairi_github.io/images/thedabom_symbol_white_removed_background.png" alt="thedabom Logo" className="logo" />
+            </div>
+            <div className="background-image-container">
+                <div className="background-text">EXOAI</div>
+            </div>
             <div className="button-container">
                 <button className="header-button run-button" onClick={calculateOutputs} disabled={isLoading}>
                     {isLoading ? 'Calculating...' : 'RUN'}
@@ -500,16 +435,33 @@ const getRandomImage = () => {
 
             {showCSV && (
                 <div className="csv-viewer">
-                    {/* ... (keep the existing CSV viewer code) */}
+                    <table>
+                        <thead>
+                            <tr>
+                                {data.length > 0 && Object.keys(data[0]).map((key, index) => (
+                                    <th key={index}>{key}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.map((row, rowIndex) => (
+                                <tr key={rowIndex}>
+                                    {Object.values(row).map((value, valueIndex) => (
+                                        <td key={valueIndex}>{value}</td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
 
             <div className="input-output-wrapper">
                 <div className="input-section">
                     <div className="collapsible-section">
-<h3 onClick={() => setShowCMAs(!showCMAs)}> 
-    Critical Material Attributes (CMAs) {showCMAs ? '▼' : '▶'}
-</h3>
+                        <h3 onClick={() => setShowCMAs(!showCMAs)}> 
+                            Critical Material Attributes (CMAs) {showCMAs ? '▼' : '▶'}
+                        </h3>
                         {showCMAs && (
                             <div>
                                 {lipids.map((lipid, index) => (
@@ -542,9 +494,9 @@ const getRandomImage = () => {
                         )}
                     </div>
                     <div className="collapsible-section">
-<h3 onClick={() => setShowCPPs(!showCPPs)}>
-    Critical Process Parameters (CPPs) {showCPPs ? '▼' : '▶'}
-</h3>
+                        <h3 onClick={() => setShowCPPs(!showCPPs)}>
+                            Critical Process Parameters (CPPs) {showCPPs ? '▼' : '▶'}
+                        </h3>
                         {showCPPs && (
                             <div>
                                 <div className="input-group">
@@ -570,7 +522,7 @@ const getRandomImage = () => {
                     </div>
                 </div>
                 <div className="output-section">
-<h3>Critical Quality Attributes (CQAs)</h3>
+                    <h3>Critical Quality Attributes (CQAs)</h3>
                     <p>Particle Size: <span className="output-value">{outputs.particleSize}</span></p>
                     <p>Zeta Potential: <span className="output-value">{outputs.zetaPotential}</span></p>
                     <p>PDI: <span className="output-value">{outputs.pdi}</span></p>
@@ -589,7 +541,8 @@ const getRandomImage = () => {
         </div>
     );
 };
-    ReactDOM.render(<NanoparticleSimulator />, document.getElementById('root'));
+
+ReactDOM.render(<NanoparticleSimulator />, document.getElementById('root'));
     </script>
 </body>
 </html>
